@@ -626,8 +626,6 @@ class ScholarArticleParser120726(ScholarArticleParser):
                     and tag.div and tag.div.div and tag.div.div.a and tag.div.div.a.span \
                     and tag.div.div.a.span.get_text() == "[PDF]":
                 self.article['url_pdf'] = self._path2url(tag.div.div.a['href'])
-            else:
-                print('not setting pdf link')
 
 
 class ScholarQuery(object):
