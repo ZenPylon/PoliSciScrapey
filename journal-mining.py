@@ -1,9 +1,11 @@
 import os
 import time
+import wget
 
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
+from firebase_admin import storage
 import scholar
 
 # Use a service account
@@ -25,16 +27,16 @@ query = scholar.SearchScholarQuery()
 
 # Configure the query parameters.
 pub_year = '2013'
-pub_name = u'"Journal Of Politics"'
+pub_name = u'"The Journal Of Politics"'
 
 queries = db.collection('queries')
+cluster_ids = db.collection('cluster_ids')
 
 # Set before = after to only get results from one year.
 query.set_timeframe(pub_year, pub_year)  
 query.set_pub(pub_name)
 query.set_include_citations(False)
 query.set_include_patents(False)
-
 
 existing_query = queries \
         .where(u'publication_title', u'==', pub_name) \
@@ -46,11 +48,14 @@ if sum(1 for x in existing_query ) != 0:
     print(f'query for {pub_name} in {pub_year} already run (or in progress).  Skipping...')
 else:
     print('marking query as started in firestore')
+
     # Create a document to mark this query
-    query_doc_ref = queries.add({
+    query_doc_ref = queries.document()
+    query_doc_ref.set({
         'completed': False,
         'created_at': int(time.time()),
-        'publication_title': pub_name,
+        'end_index': int(max_start),
+        'publication_name': pub_name,
         'publication_year': int(pub_year),
         'start_index': int(start_index)
     })
@@ -65,18 +70,32 @@ else:
         # If we reach the end of the results page    
         if len(articles) == 0:
             break
-    
+
         # Fitler articles to include only those with pdf links and exact
         # publication matches
-        articles = list(filter(lambda x: x['title'] == pub_name, articles))
-        pdfs = list(filter(lambda x: x['url_pdf'] is not None, articles))
+        
+        # articles = list(filter(lambda x: x['title'] == pub_name, articles))
+        pdf_articles = list(filter(lambda x: x['url_pdf'] is not None, articles))
         total_matches += len(articles)
-        matches_with_pdf += len(pdfs)
+        matches_with_pdf += len(pdf_articles)
 
         print(f'Printing results from {search_offset} to {search_offset + results_per_page}')
-        
-        for pdf in pdfs:
-            pdf['url_pdf']
+
+        for article in pdf_articles:
+            print(f'Downloading pdf from {article['url_pdf']} ...')
+            wget.download(article['url_pdf'], f'./pdfs/{article['cluster_id'].pdf}')
+            
+            print('Saving cluster id in firestore...')
+            cluster_ids.set(str(article['cluster_id']), {
+                'created_at': int(time.time()),
+                'publication_name': pub_name,
+                'publication_year': int(pub_year),
+                'url': article['url_pdf']
+            })
+            
+            print('Saving pdf file in Firebase Cloud Storage...')
+
+
 
         time.sleep(search_wait_time)
         search_offset += results_per_page
@@ -84,6 +103,7 @@ else:
     # Mark our query as complete, and note the number of matches / pdfs
     query_doc_ref.update({
         'completed': True,
+        'completed_at': int(time.time()),
         'total_matches': total_matches,
         'matches_with_pdf': matches_with_pdf
     })
