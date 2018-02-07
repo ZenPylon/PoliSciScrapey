@@ -6,7 +6,7 @@ import time
 search_wait_time = 4
 results_per_page = 10
 start_offset = 0
-max_start = 40
+max_start = 10
 querier = scholar.ScholarQuerier()
 query = scholar.SearchScholarQuery()
 
@@ -22,9 +22,13 @@ query.set_include_patents(False)
 
 while start_offset < max_start:
     query.set_start(start_offset)
-    print('Printing results from start position %(start_offset)s')
+    print(f'Printing results from {start_offset} to {start_offset + results_per_page}')
     querier.send_query(query)
     articles = querier.articles
+    print(f'number of articles is {len(articles)}')
+    pdfs = list(filter(lambda x: x['url_pdf'] is not None, articles))
+    print(f'filtered length is {len(pdfs)}')
+
     for art in articles:
         print(str(art.as_txt()) + '\n')
 
