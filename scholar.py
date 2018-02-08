@@ -625,7 +625,6 @@ class ScholarArticleParser120726(ScholarArticleParser):
             if self.article['url_pdf'] is None and tag.name == 'div' and self._tag_has_class(tag, 'gs_ggs') \
                     and tag.div and tag.div.div and tag.div.div.a and tag.div.div.a.span \
                     and tag.div.div.a.span.get_text() == "[PDF]":
-                print(f"raw href {tag.div.div.a['href']}")
                 self.article['url_pdf'] = tag.div.div.a['href']
 
 

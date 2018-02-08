@@ -110,7 +110,7 @@ else:
 
             except:
                 print(f'error processing pdf:  {str(local_path)}')
-                errors += 1
+                total_errors += 1
 
         time.sleep(search_wait_time)
         search_offset += results_per_page
@@ -120,7 +120,7 @@ else:
     query_doc_ref.update({
         'completed': True,
         'completed_at': int(time.time()),
-        'total_errors': total_errors
+        'total_errors': total_errors,
         'total_matches': total_matches,
         'matches_with_pdf': matches_with_pdf
     })
