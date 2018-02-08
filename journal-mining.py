@@ -9,13 +9,18 @@ from firebase_admin import storage
 import scholar
 
 # Use a service account
-cred = credentials.ApplicationDefault()
+cred = credentials.Certificate('serviceAccountKey.json')
 firebase_admin.initialize_app(cred, {
-  'projectId': 'scrapeymcscrapescrape',
+    'projectId': 'scrapeymcscrapescrape',
+    'storageBucket': 'scrapeymcscrapescrape.appspot.com'
 })
 
 db = firestore.client()
+bucket = storage.bucket()
 
+if not os.path.exists('./pdfs'):
+    os.makedirs('./pdfs')
+    
 # Rate limit parameter.
 search_wait_time = 4
 results_per_page = 10
@@ -39,7 +44,7 @@ query.set_include_citations(False)
 query.set_include_patents(False)
 
 existing_query = queries \
-        .where(u'publication_title', u'==', pub_name) \
+        .where(u'publication_name', u'==', pub_name) \
         .where(u'publication_year', u'==', int(pub_year)) \
         .get()
 
@@ -62,6 +67,7 @@ else:
 
     total_matches = 0
     matches_with_pdf = 0
+    total_errors = 0
     while search_offset < max_start:
         query.set_start(search_offset)
         querier.send_query(query)
@@ -82,28 +88,39 @@ else:
         print(f'Printing results from {search_offset} to {search_offset + results_per_page}')
 
         for article in pdf_articles:
-            print(f'Downloading pdf from {article['url_pdf']} ...')
-            wget.download(article['url_pdf'], f'./pdfs/{article['cluster_id'].pdf}')
+            cluster_id = str(article['cluster_id'])
+            pdf_url = str(article["url_pdf"])
+            local_path = f'pdfs/{cluster_id}.pdf'
+            print(f'Downloading pdf from {pdf_url}')
             
-            print('Saving cluster id in firestore...')
-            cluster_ids.set(str(article['cluster_id']), {
-                'created_at': int(time.time()),
-                'publication_name': pub_name,
-                'publication_year': int(pub_year),
-                'url': article['url_pdf']
-            })
+            try:
+                wget.download(pdf_url, local_path)
+
+                print('\nSaving cluster id in firestore...')
+                cluster_ids.document(cluster_id).set({
+                    'created_at': int(time.time()),
+                    'publication_name': pub_name,
+                    'publication_year': int(pub_year),
+                    'url': article['url_pdf']
+                })
             
-            print('Saving pdf file in Firebase Cloud Storage...')
+                print('Saving pdf file in Firebase Cloud Storage...')
+                pdfblob = bucket.blob(f'pdf/{cluster_id}.pdf')
+                pdfblob.upload_from_filename(local_path)
 
-
+            except:
+                print(f'error processing pdf:  {str(local_path)}')
+                errors += 1
 
         time.sleep(search_wait_time)
         search_offset += results_per_page
+        print('iteration complete, delaying before next iteration')
     
     # Mark our query as complete, and note the number of matches / pdfs
     query_doc_ref.update({
         'completed': True,
         'completed_at': int(time.time()),
+        'total_errors': total_errors
         'total_matches': total_matches,
         'matches_with_pdf': matches_with_pdf
     })
